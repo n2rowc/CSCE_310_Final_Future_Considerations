@@ -8,10 +8,14 @@ CREATE DATABASE IF NOT EXISTS online_bookstore
 
 USE online_bookstore;
 
+DROP TABLE IF EXISTS rentals;
+DROP TABLE IF EXISTS reviews;
+DROP TABLE IF EXISTS inventory;
 DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS books;
 DROP TABLE IF EXISTS users;
+
 
 -- =========================
 -- 1. Users
@@ -86,3 +90,78 @@ CREATE TABLE order_items (
     INDEX idx_order_items_order (order_id),
     INDEX idx_order_items_book (book_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- =================================
+-- 5. FUTURE CONSIDERATIONS APPENDED
+-- =================================
+
+-- ============================
+-- FUTURE: Book Metadata
+-- ============================
+
+ALTER TABLE books
+  ADD COLUMN genre VARCHAR(100) DEFAULT NULL,
+  ADD COLUMN publication_year SMALLINT DEFAULT NULL;
+
+CREATE INDEX idx_books_genre_year ON books (genre, publication_year);
+
+-- ============================
+-- FUTURE: Inventory Table
+-- ============================
+
+CREATE TABLE inventory (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    book_id INT UNSIGNED NOT NULL,
+    total_copies INT UNSIGNED NOT NULL DEFAULT 10,
+    available_copies INT UNSIGNED NOT NULL DEFAULT 10,
+    last_updated DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (book_id) REFERENCES books(id)
+      ON DELETE CASCADE
+      ON UPDATE CASCADE
+);
+
+-- ============================
+-- FUTURE: Rental Tracking
+-- ============================
+
+CREATE TABLE rentals (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_item_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    book_id INT UNSIGNED NOT NULL,
+    rented_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    due_date DATETIME NOT NULL,
+    returned_at DATETIME DEFAULT NULL,
+
+    FOREIGN KEY (order_item_id) REFERENCES order_items(id)
+      ON DELETE CASCADE
+      ON UPDATE CASCADE,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+      ON DELETE CASCADE,
+
+    FOREIGN KEY (book_id) REFERENCES books(id)
+      ON DELETE CASCADE
+);
+
+-- ============================
+-- FUTURE: Reviews + Ratings
+-- ============================
+
+CREATE TABLE reviews (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    book_id INT UNSIGNED NOT NULL,
+    rating TINYINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review_text TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (book_id) REFERENCES books(id)
+      ON DELETE CASCADE,
+
+    UNIQUE KEY unique_review_per_user (user_id, book_id)
+);
