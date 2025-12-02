@@ -1,23 +1,36 @@
-# frontend/customer_view.py
+# ============================================================
+# Customer UI (Improved, Cleanup, Bug-Proofed)
+# ============================================================
+
 import tkinter as tk
 from tkinter import ttk, messagebox
+from api_client import (
+    api_search_books,
+    api_place_order,
+    api_get_history,
+    api_get_book_details,
+    api_submit_review
+)
 
-from api_client import api_search_books, api_place_order
-
+# ---------------- COLORS (UNCHANGED) ----------------
 PRIMARY_BG = "#f7f1e3"
 NAV_BG = "#3b3a30"
 NAV_FG = "#fdfaf3"
 ACCENT = "#8b0000"
 TEXT_COLOR = "#2b2b2b"
 
-BUTTON_BG = "#d2b48c"   # tan, readable on all platforms
+BUTTON_BG = "#d2b48c"
 BUTTON_FG = "#8b0000"
-BUTTON_Black =  "#000000"  # black text
+BUTTON_Black = "#000000"
 
 TITLE_FONT = ("Georgia", 20, "bold")
 LABEL_FONT = ("Georgia", 12)
 NAV_FONT = ("Georgia", 12, "bold")
 
+
+# ============================================================
+# MAIN FRAME
+# ============================================================
 
 class CustomerFrame(tk.Frame):
     def __init__(self, master, controller):
@@ -25,344 +38,524 @@ class CustomerFrame(tk.Frame):
         self.controller = controller
         self.user_info = controller.user_info
 
-        self.cart = []      # list of dicts: {book_id, title, author, type, price}
-        self.book_map = {}  # book_id -> book details
+        self.cart = []       # items user selected
+        self.book_map = {}   # id → book row
+        self.sort_state = {} # sorting memory for books
 
-        self._build_layout()
+        self._build_ui()
         self.show_books_view()
 
-    # ---------- Layout ----------
-    def _build_layout(self):
-        # Top navbar
+    # ============================================================
+    # NAV + LAYOUT
+    # ============================================================
+
+    def _build_ui(self):
         nav = tk.Frame(self, bg=NAV_BG, height=50)
         nav.pack(side="top", fill="x")
 
-        title = tk.Label(
+        tk.Label(
             nav,
             text=f"Customer: {self.user_info['username']}",
-            bg=NAV_BG,
-            fg=NAV_FG,
             font=TITLE_FONT,
-        )
-        title.pack(side="left", padx=20)
-
-        btn_books = tk.Button(
-            nav,
-            text="Books",
             bg=NAV_BG,
-            fg=BUTTON_Black,
-            font=NAV_FONT,
-            relief="flat",
-            command=self.show_books_view,
-        )
-        btn_books.pack(side="left", padx=10)
+            fg=NAV_FG
+        ).pack(side="left", padx=20)
 
-        btn_cart = tk.Button(
-            nav,
-            text="Checkout Cart",
-            bg=NAV_BG,
-            fg=BUTTON_Black,
-            font=NAV_FONT,
-            relief="flat",
-            command=self.show_cart_view,
-        )
-        btn_cart.pack(side="left", padx=10)
+        for name, func in [
+            ("Books", self.show_books_view),
+            ("Checkout Cart", self.show_cart_view),
+            ("History", self.show_history_view)
+        ]:
+            tk.Button(
+                nav,
+                text=name,
+                font=NAV_FONT,
+                bg=NAV_BG,
+                fg=BUTTON_Black,
+                relief="flat",
+                command=func
+            ).pack(side="left", padx=10)
 
-        btn_logout = tk.Button(
+        tk.Button(
             nav,
             text="Logout",
+            font=NAV_FONT,
             bg=NAV_BG,
             fg=BUTTON_Black,
-            font=NAV_FONT,
             relief="flat",
-            command=self.controller.logout,
-        )
-        btn_logout.pack(side="right", padx=20)
+            command=self.controller.logout
+        ).pack(side="right", padx=20)
 
-        # Content area
         self.content = tk.Frame(self, bg=PRIMARY_BG)
         self.content.pack(fill="both", expand=True, padx=20, pady=20)
 
-    def _clear_content(self):
+    def _clear(self):
         for child in self.content.winfo_children():
             child.destroy()
 
-    # ---------- Books view ----------
+    # ============================================================
+    # BOOKS VIEW
+    # ============================================================
+
     def show_books_view(self):
-        self._clear_content()
+        self._clear()
 
-        # Search bar
-        search_frame = tk.Frame(self.content, bg=PRIMARY_BG)
-        search_frame.pack(fill="x", pady=(0, 10))
+        # ---------------- SEARCH BAR ----------------
+        sf = tk.Frame(self.content, bg=PRIMARY_BG)
+        sf.pack(fill="x", pady=(0, 10))
 
-        tk.Label(
-            search_frame,
-            text="Search by title or author:",
-            font=LABEL_FONT,
-            bg=PRIMARY_BG,
-            fg=TEXT_COLOR,
-        ).pack(side="left")
+        self.q_var = tk.StringVar()
+        self.genre_var = tk.StringVar()
+        self.year_var = tk.StringVar()
 
-        self.search_var = tk.StringVar()
-        entry = tk.Entry(search_frame, textvariable=self.search_var, width=40, font=LABEL_FONT)
-        entry.pack(side="left", padx=10)
-        entry.bind("<Return>", lambda e: self._perform_search())
+        tk.Label(sf, text="Keyword:", bg=PRIMARY_BG, fg=TEXT_COLOR,
+                 font=LABEL_FONT).grid(row=0, column=0, sticky="w")
+        tk.Entry(sf, textvariable=self.q_var, width=18).grid(row=0, column=1, padx=5)
 
-        btn_search = tk.Button(
-            search_frame,
+        tk.Label(sf, text="Genre:", bg=PRIMARY_BG, fg=TEXT_COLOR,
+                 font=LABEL_FONT).grid(row=0, column=2, sticky="w")
+        tk.Entry(sf, textvariable=self.genre_var, width=15).grid(row=0, column=3, padx=5)
+
+        tk.Label(sf, text="Year:", bg=PRIMARY_BG, fg=TEXT_COLOR,
+                 font=LABEL_FONT).grid(row=0, column=4, sticky="w")
+        tk.Entry(sf, textvariable=self.year_var, width=10).grid(row=0, column=5, padx=5)
+
+        tk.Button(
+            sf,
             text="Search",
-            font=LABEL_FONT,
             bg=ACCENT,
             fg=BUTTON_FG,
-            command=self._perform_search,
-        )
-        btn_search.pack(side="left")
+            font=LABEL_FONT,
+            command=self._search
+        ).grid(row=0, column=6, padx=12)
 
-        # Results table
-        table_frame = tk.Frame(self.content, bg=PRIMARY_BG)
-        table_frame.pack(fill="both", expand=True)
+        # ---------------- TABLE ----------------
+        tf = tk.Frame(self.content, bg=PRIMARY_BG)
+        tf.pack(fill="both", expand=True)
 
-        columns = ("title", "author", "price_buy", "price_rent")
-        self.book_tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            height=15,
-        )
-        self.book_tree.heading("title", text="Title")
-        self.book_tree.heading("author", text="Author")
-        self.book_tree.heading("price_buy", text="Buy Price")
-        self.book_tree.heading("price_rent", text="Rent Price")
+        cols = ("id_hidden", "title", "author", "genre", "publication_year",
+                "price_buy", "price_rent")
+        headers = {
+            "title": "Title",
+            "author": "Author",
+            "genre": "Genre",
+            "publication_year": "Year",
+            "price_buy": "Buy",
+            "price_rent": "Rent"
+        }
 
-        self.book_tree.column("title", width=350)
-        self.book_tree.column("author", width=200)
-        self.book_tree.column("price_buy", width=80, anchor="e")
-        self.book_tree.column("price_rent", width=80, anchor="e")
+        self.tree = ttk.Treeview(tf, columns=cols, show="headings", height=16)
 
-        self.book_tree.pack(side="left", fill="both", expand=True)
+        # Hidden column for ID
+        self.tree.heading("id_hidden", text="")
+        self.tree.column("id_hidden", width=0, stretch=False)
 
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.book_tree.yview)
-        self.book_tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
+        for col in cols[1:]:
+            self.sort_state[col] = None
+            self.tree.heading(col, text=headers[col], command=lambda c=col: self._sort_col(c))
+            self.tree.column(col, width=140, anchor="w")
 
-        # Add buttons
-        btn_frame = tk.Frame(self.content, bg=PRIMARY_BG)
-        btn_frame.pack(fill="x", pady=(10, 0))
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
 
-        btn_buy = tk.Button(
-            btn_frame,
+        self.tree.bind("<Double-1>", self._open_book_popup_from_selection)
+        self._search()
+
+        # ---------------- ADD TO CART ----------------
+        btns = tk.Frame(self.content, bg=PRIMARY_BG)
+        btns.pack(fill="x", pady=(12, 0))
+
+        tk.Button(
+            btns,
             text="Add Selected as Buy",
             font=LABEL_FONT,
             bg=ACCENT,
             fg=BUTTON_FG,
-            command=lambda: self._add_selected_to_cart("buy"),
-        )
-        btn_buy.pack(side="left")
+            command=lambda: self.add_to_cart("buy")
+        ).pack(side="left", padx=(0, 10))
 
-        btn_rent = tk.Button(
-            btn_frame,
+        tk.Button(
+            btns,
             text="Add Selected as Rent",
             font=LABEL_FONT,
             bg=ACCENT,
             fg=BUTTON_FG,
-            command=lambda: self._add_selected_to_cart("rent"),
-        )
-        btn_rent.pack(side="left", padx=10)
+            command=lambda: self.add_to_cart("rent")
+        ).pack(side="left")
 
-        self._perform_search(initial=True)
+    # ============================================================
+    # SEARCH HANDLER
+    # ============================================================
 
-    def _perform_search(self, initial=False):
-        keyword = self.search_var.get() if hasattr(self, "search_var") else ""
-        books, error = api_search_books(keyword)
-        if error:
-            if not initial:
-                messagebox.showerror("Search error", error)
+    def _search(self):
+        params = {
+            "q": self.q_var.get(),
+            "genre": self.genre_var.get(),
+            "year": self.year_var.get()
+        }
+
+        books, err = api_search_books(params)
+        if err:
+            messagebox.showerror("Search Error", err)
             return
 
-        # Clear current items
-        for row in self.book_tree.get_children():
-            self.book_tree.delete(row)
+        for r in self.tree.get_children():
+            self.tree.delete(r)
 
         self.book_map = {}
+
         for b in books:
             bid = b["id"]
             self.book_map[bid] = b
-            self.book_tree.insert(
+
+            self.tree.insert(
                 "",
                 "end",
-                iid=str(bid),
                 values=(
+                    bid,
                     b["title"],
                     b["author"],
+                    b.get("genre") or "",
+                    b.get("publication_year") or "",
                     f"${float(b['price_buy']):.2f}",
-                    f"${float(b['price_rent']):.2f}",
-                ),
+                    f"${float(b['price_rent']):.2f}"
+                )
             )
 
-    def _add_selected_to_cart(self, purchase_type: str):
-        sel = self.book_tree.selection()
-        if not sel:
-            messagebox.showwarning("No selection", "Please select a book first.")
-            return
+    # ============================================================
+    # SORTING
+    # ============================================================
 
-        book_id = int(sel[0])
-        b = self.book_map.get(book_id)
-        if not b:
-            messagebox.showerror("Error", "Selected book not found.")
-            return
+    def _sort_col(self, col):
+        curr = self.sort_state[col]
+        new_direction = "asc" if curr in (None, "desc") else "desc"
+        self.sort_state[col] = new_direction
+        reverse = (new_direction == "desc")
 
-        if purchase_type == "buy":
-            price = float(b["price_buy"])
-        else:
-            price = float(b["price_rent"])
+        items = []
+        for iid in self.tree.get_children():
+            val = self.tree.set(iid, col)
+            try:
+                if col in ("price_buy", "price_rent"):
+                    val = float(val.replace("$", ""))
+                elif col == "publication_year":
+                    val = int(val) if val else 0
+                else:
+                    val = val.lower()
+            except:
+                pass
+            items.append((val, iid))
 
-        self.cart.append({
-            "book_id": book_id,
-            "title": b["title"],
-            "author": b["author"],
-            "type": purchase_type,
-            "price": price,
-        })
+        items.sort(reverse=reverse)
+        for idx, (_, iid) in enumerate(items):
+            self.tree.move(iid, "", idx)
 
-        messagebox.showinfo(
-            "Added to cart",
-            f"{b['title']} ({purchase_type}) added to your cart.",
-        )
+    # ============================================================
+    # CART VIEW
+    # ============================================================
 
-    # ---------- Cart view ----------
     def show_cart_view(self):
-        self._clear_content()
+        self._clear()
 
-        title = tk.Label(
-            self.content,
-            text="Your Cart",
-            font=TITLE_FONT,
-            bg=PRIMARY_BG,
-            fg=ACCENT,
-        )
-        title.pack(anchor="w", pady=(0, 10))
+        tk.Label(self.content,
+                 text="Your Cart",
+                 font=TITLE_FONT,
+                 bg=PRIMARY_BG,
+                 fg=ACCENT).pack(anchor="w", pady=(0, 10))
 
         if not self.cart:
-            msg = tk.Label(
-                self.content,
-                text="Your cart is empty. Go to the Books tab to add items.",
-                font=LABEL_FONT,
-                bg=PRIMARY_BG,
-                fg=TEXT_COLOR,
-            )
-            msg.pack(anchor="w")
+            tk.Label(self.content,
+                     text="Your cart is empty.",
+                     font=LABEL_FONT,
+                     bg=PRIMARY_BG,
+                     fg=TEXT_COLOR).pack(anchor="w")
             return
 
-        # Table
-        table_frame = tk.Frame(self.content, bg=PRIMARY_BG)
-        table_frame.pack(fill="both", expand=True)
+        tf = tk.Frame(self.content, bg=PRIMARY_BG)
+        tf.pack(fill="both", expand=True)
 
-        columns = ("title", "author", "type", "price")
-        cart_tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            height=10,
-        )
-        for col, text in zip(columns, ["Title", "Author", "Type", "Price"]):
-            cart_tree.heading(col, text=text)
+        cols = ("title", "author", "type", "price")
+        tree = ttk.Treeview(tf, columns=cols, show="headings", height=10)
 
-        cart_tree.column("title", width=350)
-        cart_tree.column("author", width=200)
-        cart_tree.column("type", width=80, anchor="center")
-        cart_tree.column("price", width=80, anchor="e")
+        for c in cols:
+            tree.heading(c, text=c.title())
+            tree.column(c, width=160)
 
-        for item in self.cart:
-            cart_tree.insert(
-                "",
-                "end",
-                values=(
-                    item["title"],
-                    item["author"],
-                    item["type"],
-                    f"${item['price']:.2f}",
-                ),
-            )
+        for it in self.cart:
+            tree.insert("", "end", values=(
+                it["title"],
+                it["author"],
+                it["type"],
+                f"${it['price']:.2f}"
+            ))
 
-        cart_tree.pack(side="left", fill="both", expand=True)
+        tree.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(tf, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
 
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=cart_tree.yview)
-        cart_tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-
-        # Summary + order button
+        # Checkout
         bottom = tk.Frame(self.content, bg=PRIMARY_BG)
-        bottom.pack(fill="x", pady=(10, 0))
+        bottom.pack(fill="x", pady=12)
 
         total = sum(i["price"] for i in self.cart)
-        total_label = tk.Label(
-            bottom,
-            text=f"Total: ${total:.2f}",
-            font=("Georgia", 14, "bold"),
-            bg=PRIMARY_BG,
-            fg=TEXT_COLOR,
-        )
-        total_label.pack(side="left")
+        tk.Label(bottom,
+                 text=f"Total: ${total:.2f}",
+                 font=("Georgia", 14, "bold"),
+                 bg=PRIMARY_BG,
+                 fg=TEXT_COLOR).pack(side="left")
 
-        place_btn = tk.Button(
+        tk.Button(
             bottom,
             text="Place Order",
-            font=LABEL_FONT,
             bg=ACCENT,
             fg=BUTTON_FG,
-            command=self._place_order,
-        )
-        place_btn.pack(side="right")
+            font=LABEL_FONT,
+            command=self._place_order
+        ).pack(side="right")
 
     def _place_order(self):
-        if not self.cart:
-            messagebox.showwarning("Empty cart", "There is nothing to order.")
+        payload = [{"book_id": it["book_id"], "type": it["type"]} for it in self.cart]
+
+        bill, err = api_place_order(self.user_info["user_id"], payload)
+        if err:
+            messagebox.showerror("Order Error", err)
             return
 
-        confirm = messagebox.askyesno(
-            "Confirm Order",
-            "Place order and generate bill?",
-        )
-        if not confirm:
-            return
-
-        payload_items = [{"book_id": c["book_id"], "type": c["type"]} for c in self.cart]
-        bill, error = api_place_order(self.user_info["user_id"], payload_items)
-
-        if error:
-            messagebox.showerror("Order error", error)
-            return
-
-        # Show bill in a popup
-        self._show_bill_window(bill)
-        # Clear cart and refresh
         self.cart = []
+        self._show_bill(bill)
         self.show_cart_view()
 
-    def _show_bill_window(self, bill):
+    def _show_bill(self, bill):
         win = tk.Toplevel(self)
-        win.title(f"Order #{bill['order_id']} Bill")
+        win.title(f"Order #{bill['order_id']}")
         win.geometry("500x400")
         win.configure(bg=PRIMARY_BG)
 
-        text = tk.Text(win, bg=PRIMARY_BG, fg=TEXT_COLOR, font=("Courier New", 11))
-        text.pack(fill="both", expand=True, padx=10, pady=10)
+        text = tk.Text(win, bg=PRIMARY_BG, fg=TEXT_COLOR, font=("Courier", 12))
+        text.pack(fill="both", expand=True)
 
-        lines = []
-        lines.append(f"Order ID: {bill['order_id']}")
-        lines.append(f"Customer ID: {bill['user_id']}")
-        lines.append(f"Payment Status: {bill['payment_status']}")
-        lines.append("")
-        lines.append("Items:")
-        lines.append("-" * 60)
+        lines = [
+            f"Order ID: {bill['order_id']}",
+            f"Customer ID: {bill['user_id']}",
+            f"Payment Status: {bill['payment_status']}",
+            "",
+            "Items:",
+            "-" * 50
+        ]
 
-        for item in bill["items"]:
-            lines.append(
-                f"{item['title']} ({item['type']}) - ${item['price']:.2f}"
-            )
+        for it in bill["items"]:
+            lines.append(f"{it['title']} ({it['type']}) - ${it['price']:.2f}")
 
-        lines.append("-" * 60)
+        lines.append("-" * 50)
         lines.append(f"TOTAL: ${bill['total_price']:.2f}")
 
         text.insert("1.0", "\n".join(lines))
-        text.config(state="disabled")
+        text.configure(state="disabled")
+
+    # ============================================================
+    # HISTORY VIEW
+    # ============================================================
+
+    def show_history_view(self):
+        self._clear()
+
+        tk.Label(self.content,
+                 text="History",
+                 font=TITLE_FONT,
+                 bg=PRIMARY_BG,
+                 fg=ACCENT).pack(anchor="w", pady=10)
+
+        data, err = api_get_history(self.user_info["user_id"])
+        if err:
+            messagebox.showerror("Error", err)
+            return
+
+        self._history_block("Purchases", data["purchases"])
+        self._history_block("Current Rentals", data["current_rentals"])
+        self._history_block("Past Rentals", data["past_rentals"])
+        self._history_block("Your Reviews", data["reviews"])
+
+    def _history_block(self, title, rows):
+        tk.Label(self.content,
+                 text=title,
+                 font=("Georgia", 16, "bold"),
+                 bg=PRIMARY_BG,
+                 fg=TEXT_COLOR).pack(anchor="w", pady=(15, 5))
+
+        if not rows:
+            tk.Label(self.content, text="None",
+                     font=LABEL_FONT, bg=PRIMARY_BG, fg=TEXT_COLOR).pack(anchor="w")
+            return
+
+        frame = tk.Frame(self.content, bg=PRIMARY_BG)
+        frame.pack(fill="x")
+
+        # Option 2: Cleaned, readable columns
+        clean_cols = ["book_id", "title", "author"] + [
+            c for c in rows[0].keys()
+            if c not in ("book_id", "title", "author")
+        ]
+
+        tree = ttk.Treeview(frame, columns=clean_cols, show="headings", height=5)
+
+        # Hide book_id column
+        tree.column("book_id", width=0, stretch=False)
+        tree.heading("book_id", text="")
+
+        for c in clean_cols[1:]:
+            tree.heading(c, text=c.replace("_", " ").title())
+            tree.column(c, width=160)
+
+        for r in rows:
+            tree.insert("", "end", values=[r.get(c, "") for c in clean_cols])
+
+        tree.pack(side="left", fill="x", expand=True)
+        sb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+
+        tree.bind("<Double-1>", lambda e, t=tree: self._open_book_popup_from_history(t))
+
+    # ============================================================
+    # POPUP LOGIC (UNIFIED)
+    # ============================================================
+
+    def _open_book_popup_from_selection(self, event):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        row = self.tree.item(sel[0], "values")
+        book_id = int(row[0])  # first column is always id_hidden
+        self._open_book_popup(book_id)
+
+    def _open_book_popup_from_history(self, tree):
+        sel = tree.selection()
+        if not sel:
+            return
+        row = tree.item(sel[0], "values")
+        book_id = int(row[0])  # hidden column
+        self._open_book_popup(book_id)
+
+    def _open_book_popup(self, book_id):
+        data, err = api_get_book_details(book_id, self.user_info["user_id"])
+        if err:
+            messagebox.showerror("Error", err)
+            return
+
+        win = tk.Toplevel(self)
+        win.title(data["title"])
+        win.geometry("450x550")
+        win.configure(bg=PRIMARY_BG)
+
+        # Info block
+        info = [
+            f"Title: {data['title']}",
+            f"Author: {data['author']}",
+            f"Genre: {data.get('genre', '')}",
+            f"Year: {data.get('publication_year', '')}",
+            f"Buy: ${float(data['price_buy']):.2f}" if data.get("price_buy") else "Buy: N/A",
+            f"Rent: ${float(data['price_rent']):.2f}" if data.get("price_rent") else "Rent: N/A",
+            "",
+            (
+                f"Average Rating: {data['avg_rating']:.2f} ({data['review_count']} reviews)"
+                if data.get("avg_rating") else "No ratings yet."
+            )
+        ]
+
+        tk.Label(
+            win,
+            text="\n".join(info),
+            bg=PRIMARY_BG,
+            fg=TEXT_COLOR,
+            justify="left",
+            font=LABEL_FONT
+        ).pack(anchor="w", padx=10, pady=10)
+
+        # Review section
+        tk.Label(
+            win,
+            text="Leave a Review:",
+            font=("Georgia", 14, "bold"),
+            bg=PRIMARY_BG,
+            fg=ACCENT
+        ).pack(anchor="w", padx=10, pady=(10, 0))
+
+        rf = tk.Frame(win, bg=PRIMARY_BG)
+        rf.pack(fill="x", padx=10)
+
+        tk.Label(rf, text="Rating (1–5):", font=LABEL_FONT,
+                 bg=PRIMARY_BG).grid(row=0, column=0)
+
+        rating_var = tk.StringVar(
+            value=str(data["user_review"]["rating"]) if data.get("user_review") else "5"
+        )
+
+        ttk.Combobox(
+            rf,
+            values=["1", "2", "3", "4", "5"],
+            textvariable=rating_var,
+            width=5
+        ).grid(row=0, column=1, padx=4)
+
+        tk.Label(rf, text="Review:", font=LABEL_FONT,
+                 bg=PRIMARY_BG).grid(row=1, column=0, pady=5)
+
+        review_box = tk.Text(rf, width=35, height=5)
+        review_box.grid(row=2, column=0, columnspan=2)
+
+        if data.get("user_review"):
+            review_box.insert("1.0", data["user_review"]["review_text"])
+
+        def submit_review():
+            rating = int(rating_var.get())
+            text = review_box.get("1.0", "end").strip()
+
+            _, err2 = api_submit_review(
+                self.user_info["user_id"], data["id"], rating, text
+            )
+            if err2:
+                messagebox.showerror("Error", err2)
+            else:
+                messagebox.showinfo("Success", "Review submitted!")
+                win.destroy()
+
+        tk.Button(
+            win,
+            text="Submit Review",
+            bg=ACCENT,
+            fg=BUTTON_FG,
+            font=LABEL_FONT,
+            command=submit_review
+        ).pack(pady=10)
+
+    # ============================================================
+    # ADD TO CART
+    # ============================================================
+
+    def add_to_cart(self, type_):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select Book", "Please select a book.")
+            return
+
+        row = self.tree.item(sel[0], "values")
+        bid = int(row[0])  # hidden ID column
+        b = self.book_map.get(bid)
+        if not b:
+            messagebox.showerror("Error", "Invalid book selection.")
+            return
+
+        price = float(b["price_buy"] if type_ == "buy" else b["price_rent"])
+
+        self.cart.append({
+            "book_id": bid,
+            "title": b["title"],
+            "author": b["author"],
+            "type": type_,
+            "price": price
+        })
+
+        messagebox.showinfo("Added", f"{b['title']} ({type_}) added to cart.")
