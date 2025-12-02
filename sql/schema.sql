@@ -128,23 +128,27 @@ CREATE TABLE inventory (
 
 CREATE TABLE rentals (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    order_item_id INT UNSIGNED NOT NULL,
+    order_item_id INT UNSIGNED NULL,
     user_id INT UNSIGNED NOT NULL,
     book_id INT UNSIGNED NOT NULL,
     rented_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     due_date DATETIME NOT NULL,
     returned_at DATETIME DEFAULT NULL,
 
-    FOREIGN KEY (order_item_id) REFERENCES order_items(id)
-      ON DELETE CASCADE
+    CONSTRAINT fk_rentals_order_item
+      FOREIGN KEY (order_item_id) REFERENCES order_items(id)
+      ON DELETE SET NULL
       ON UPDATE CASCADE,
 
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    CONSTRAINT fk_rentals_user
+      FOREIGN KEY (user_id) REFERENCES users(id)
       ON DELETE CASCADE,
 
-    FOREIGN KEY (book_id) REFERENCES books(id)
+    CONSTRAINT fk_rentals_book
+      FOREIGN KEY (book_id) REFERENCES books(id)
       ON DELETE CASCADE
 );
+
 
 -- ============================
 -- FUTURE: Reviews + Ratings
