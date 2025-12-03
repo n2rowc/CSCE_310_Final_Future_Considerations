@@ -321,8 +321,22 @@ def init_manager_routes(app):
         genre = data.get("genre")
         year = data.get("publication_year")
 
+        # Basic presence check
         if not title or not author or pb is None or pr is None or total_copies is None or available_copies is None:
             return jsonify({"error": "Missing required fields"}), 400
+
+        # Validate numeric inventory fields
+        try:
+            total_copies = int(total_copies)
+            available_copies = int(available_copies)
+        except (ValueError, TypeError):
+            return jsonify({"error": "total_copies and available_copies must be integers"}), 400
+
+        if total_copies < 0 or available_copies < 0:
+            return jsonify({"error": "Inventory counts cannot be negative"}), 400
+
+        if total_copies < available_copies:
+            return jsonify({"error": "total_copies cannot be less than available_copies"}), 400
 
         conn = None
         cursor = None
@@ -330,17 +344,22 @@ def init_manager_routes(app):
             conn = get_db_connection()
             cursor = conn.cursor()
 
+            # Ensure the book exists first. Relying on cursor.rowcount after an
+            # UPDATE can be misleading (MySQL reports 0 affected rows when the
+            # new values equal the old values). Do a SELECT to check existence.
+            cursor.execute("""
+                SELECT id FROM books WHERE id = %s
+            """, (book_id,))
+            if not cursor.fetchone():
+                return jsonify({"error": "Book not found"}), 404
+
             cursor.execute("""
                 UPDATE books
                 SET title=%s, author=%s, price_buy=%s, price_rent=%s,
                     genre=%s, publication_year=%s
                 WHERE id=%s
             """, (title, author, pb, pr, genre, year, book_id))
-            
-            # Check if book was found
-            if cursor.rowcount == 0:
-                return jsonify({"error": "Book not found"}), 404
-            
+
             cursor.execute("""
                 UPDATE inventory
                 SET total_copies = %s,

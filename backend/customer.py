@@ -207,7 +207,7 @@ def init_customer_routes(app):
             """, (user_id, total))
             order_id = cur.lastrowid
 
-            # Insert order items + auto rentals
+            # Insert order items, update inventory, and auto-create rentals for rents
             for it in bill_items:
                 cur.execute("""
                     INSERT INTO order_items (order_id, book_id, type, price)
@@ -215,13 +215,49 @@ def init_customer_routes(app):
                 """, (order_id, it["book_id"], it["type"], it["price"]))
                 order_item_id = cur.lastrowid
 
+                # Lock inventory row for this book to avoid race conditions
+                cur.execute("""
+                    SELECT total_copies, available_copies
+                    FROM inventory
+                    WHERE book_id = %s
+                    FOR UPDATE
+                """, (it["book_id"],))
+                inv = cur.fetchone()
+                available = inv["available_copies"] if inv else 0
+
                 if it["type"] == "rent":
+                    # Renting consumes 1 available copy
+                    if available <= 0:
+                        # Not enough copies to rent
+                        conn.rollback()
+                        return jsonify({"error": f"No available copies to rent book {it['book_id']}"}), 400
+
+                    # decrement available_copies
+                    cur.execute("""
+                        UPDATE inventory
+                        SET available_copies = available_copies - 1
+                        WHERE book_id = %s
+                    """, (it["book_id"],))
+
                     due = datetime.now() + timedelta(days=14)
                     cur.execute("""
                         INSERT INTO rentals (order_item_id, user_id, book_id,
                                              rented_at, due_date)
                         VALUES (%s, %s, %s, NOW(), %s)
                     """, (order_item_id, user_id, it["book_id"], due))
+
+                else:  # buy
+                    # Buying consumes 1 total AND 1 available copy
+                    if available <= 0:
+                        conn.rollback()
+                        return jsonify({"error": f"No available copies to buy book {it['book_id']}"}), 400
+
+                    cur.execute("""
+                        UPDATE inventory
+                        SET total_copies = total_copies - 1,
+                            available_copies = available_copies - 1
+                        WHERE book_id = %s
+                    """, (it["book_id"],))
 
             conn.commit()
 
