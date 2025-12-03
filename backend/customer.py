@@ -41,14 +41,16 @@ def init_customer_routes(app):
 
             base = """
                 SELECT
-                    id,
-                    title,
-                    author,
-                    genre,
-                    publication_year,
-                    price_buy,
-                    price_rent
-                FROM books
+                    b.id,
+                    b.title,
+                    b.author,
+                    b.genre,
+                    b.publication_year,
+                    b.price_buy,
+                    b.price_rent,
+                    COALESCE(inv.available_copies, 0) AS available_copies
+                FROM books b
+                LEFT JOIN inventory inv ON inv.book_id = b.id
                 WHERE 1=1
             """
 

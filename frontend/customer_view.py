@@ -139,14 +139,15 @@ class CustomerFrame(tk.Frame):
         tf.pack(fill="both", expand=True)
 
         cols = ("id_hidden", "title", "author", "genre", "publication_year",
-                "price_buy", "price_rent")
+                "price_buy", "price_rent", "available_copies")
         headers = {
             "title": "Title",
             "author": "Author",
             "genre": "Genre",
             "publication_year": "Year",
             "price_buy": "Buy",
-            "price_rent": "Rent"
+            "price_rent": "Rent",
+            "available_copies": "Available"
         }
 
         self.tree = ttk.Treeview(tf, columns=cols, show="headings", height=16)
@@ -235,7 +236,8 @@ class CustomerFrame(tk.Frame):
                     b.get("genre") or "",
                     b.get("publication_year") or "",
                     f"${float(b['price_buy']):.2f}",
-                    f"${float(b['price_rent']):.2f}"
+                    f"${float(b['price_rent']):.2f}",
+                    b.get("available_copies", "N/A")
                 )
             )
 
@@ -362,6 +364,9 @@ class CustomerFrame(tk.Frame):
         tree.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
 
+        # Store reference to tree for cart item removal
+        self.cart_tree = tree
+
         # Checkout
         bottom = tk.Frame(self.content, bg=PRIMARY_BG)
         bottom.pack(fill="x", pady=12)
@@ -373,14 +378,64 @@ class CustomerFrame(tk.Frame):
                  bg=PRIMARY_BG,
                  fg=TEXT_COLOR).pack(side="left")
 
+        # Button frame for cart actions
+        button_frame = tk.Frame(bottom, bg=PRIMARY_BG)
+        button_frame.pack(side="right", padx=5)
+
         tk.Button(
-            bottom,
+            button_frame,
+            text="Remove from Cart",
+            bg="#E74C3C",
+            fg=BUTTON_FG,
+            font=LABEL_FONT,
+            command=self._remove_from_cart
+        ).pack(side="left", padx=2)
+
+        tk.Button(
+            button_frame,
+            text="Clear Cart",
+            bg="#E67E22",
+            fg=BUTTON_FG,
+            font=LABEL_FONT,
+            command=self._clear_cart
+        ).pack(side="left", padx=2)
+
+        tk.Button(
+            button_frame,
             text="Place Order",
             bg=ACCENT,
             fg=BUTTON_FG,
             font=LABEL_FONT,
             command=self._place_order
-        ).pack(side="right")
+        ).pack(side="left", padx=2)
+
+    def _remove_from_cart(self):
+        if not hasattr(self, 'cart_tree'):
+            messagebox.showwarning("Warning", "No cart tree found")
+            return
+
+        selection = self.cart_tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select an item to remove")
+            return
+
+        # Get the index of selected item (0-based)
+        item_id = selection[0]
+        item_index = self.cart_tree.index(item_id)
+
+        # Remove from cart list
+        if 0 <= item_index < len(self.cart):
+            self.cart.pop(item_index)
+            self.show_cart_view()
+
+    def _clear_cart(self):
+        if not self.cart:
+            messagebox.showinfo("Info", "Cart is already empty")
+            return
+
+        if messagebox.askyesno("Clear Cart", "Are you sure you want to clear your cart?"):
+            self.cart = []
+            self.show_cart_view()
 
     def _place_order(self):
         payload = [{"book_id": it["book_id"], "type": it["type"]} for it in self.cart]
