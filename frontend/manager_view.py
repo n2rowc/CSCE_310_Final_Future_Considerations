@@ -48,43 +48,6 @@ NAV_FONT = ("Georgia", 12, "bold")
 
 class ManagerFrame(tk.Frame):
 
-    def _on_book_selected(self, event=None):
-        sel = self.books_tree.selection()
-        if not sel:
-            return
-
-        book_id = int(sel[0])
-
-        for b in self.book_rows:
-            if b["id"] == book_id:
-                self.form_title.delete(0, "end")
-                self.form_title.insert(0, b["title"])
-
-                self.form_author.delete(0, "end")
-                self.form_author.insert(0, b["author"])
-
-                self.form_buy.delete(0, "end")
-                self.form_buy.insert(0, str(b["price_buy"]))
-
-                self.form_rent.delete(0, "end")
-                self.form_rent.insert(0, str(b["price_rent"]))
-
-                self.form_genre.delete(0, "end")
-                self.form_genre.insert(0, b["genre"] or "")
-
-                self.form_year.delete(0, "end")
-                self.form_year.insert(0, b["publication_year"] or "")
-
-                self.form_total_copies.delete(0, "end")
-                self.form_total_copies.insert(0, str(b["total_copies"]))
-
-                self.form_available_copies.delete(0, "end")
-                self.form_available_copies.insert(0, str(b["available_copies"]))
-
-
-
-                break
-
     def __init__(self, master, controller):
         super().__init__(master, bg=PRIMARY_BG)
 
@@ -94,7 +57,8 @@ class ManagerFrame(tk.Frame):
             "author": "Author",
             "buy": "Buy Price",
             "rent": "Rent Price",
-            "inventory": "Inventory",
+            "total_copies": "Total Copies",
+            "available_copies": "Available Copies",
             "rating": "Avg Rating",
             "genre": "Genre",
             "year": "Year",
@@ -220,19 +184,21 @@ class ManagerFrame(tk.Frame):
 
         # Convert values for numeric columns
         def convert(v):
-            if v is None:
-                return ""
+            """Return a consistent sortable key: (type_tag, value)
 
-            # Always treat TITLE column as string
-            if isinstance(v, str):
-                return v.lower()
+            type_tag: 0 = numeric, 1 = string, 2 = empty
+            This avoids comparing different Python types directly.
+            """
+            if v is None or v == "":
+                return (2, "")
 
-            # For non-title numeric columns:
+            # Try to convert to float first (handles IDs, prices, ratings, etc.)
             try:
-                return float(v)
-            except:
-                return str(v).lower()
-
+                num = float(str(v).replace("$", "").strip())
+                return (0, num)
+            except (ValueError, AttributeError):
+                # Fall back to string comparison (case-insensitive)
+                return (1, str(v).lower())
 
         rows = [(convert(v), k) for (v, k) in rows]
 
@@ -509,7 +475,7 @@ class ManagerFrame(tk.Frame):
         self.books_tree = ttk.Treeview(
             table_frame, columns=columns, show="headings", height=12
         )
-        self.books_tree.bind("<<TreeviewSelect>>", self._on_book_selected)
+        # Removed TreeviewSelect binding since form is gone
 
 
         headings = {
@@ -558,71 +524,32 @@ class ManagerFrame(tk.Frame):
         self.books_tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
 
-        self.books_tree.bind("<Double-1>", self.open_book_popup)
+        # Removed double-click binding - use "Edit Selected Item" button instead
 
-        # ------------------ BOOK FORM (ADD / UPDATE) ------------------
-        form = tk.Frame(self.content, bg=PRIMARY_BG)
-        form.pack(fill="x", pady=(10, 0))
-
-        # Title
-        tk.Label(form, text="Title:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=0, column=0, sticky="e")
-        self.form_title = tk.Entry(form, width=40, font=LABEL_FONT)
-        self.form_title.grid(row=0, column=1, padx=5, pady=2)
-
-        # Author
-        tk.Label(form, text="Author:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=1, column=0, sticky="e")
-        self.form_author = tk.Entry(form, width=40, font=LABEL_FONT)
-        self.form_author.grid(row=1, column=1, padx=5, pady=2)
-
-        # Buy Price
-        tk.Label(form, text="Buy Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=2, column=0, sticky="e")
-        self.form_buy = tk.Entry(form, width=15, font=LABEL_FONT)
-        self.form_buy.grid(row=2, column=1, sticky="w", padx=5, pady=2)
-
-        # Rent Price
-        tk.Label(form, text="Rent Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=3, column=0, sticky="e")
-        self.form_rent = tk.Entry(form, width=15, font=LABEL_FONT)
-        self.form_rent.grid(row=3, column=1, sticky="w", padx=5, pady=2)
-
-        # Genre
-        tk.Label(form, text="Genre:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=4, column=0, sticky="e")
-        self.form_genre = tk.Entry(form, width=30, font=LABEL_FONT)
-        self.form_genre.grid(row=4, column=1, sticky="w", padx=5, pady=2)
-
-        # Year
-        tk.Label(form, text="Year:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=5, column=0, sticky="e")
-        self.form_year = tk.Entry(form, width=10, font=LABEL_FONT)
-        self.form_year.grid(row=5, column=1, sticky="w", padx=5, pady=2)
-
-        # Total Copies
-        tk.Label(form, text="Total Copies:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=6, column=0, sticky="e")
-        self.form_total_copies = tk.Entry(form, width=10, font=LABEL_FONT)
-        self.form_total_copies.grid(row=6, column=1, sticky="w", padx=5, pady=2)
-
-        # Available Copies
-        tk.Label(form, text="Available Copies:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=7, column=0, sticky="e")
-        self.form_available_copies = tk.Entry(form, width=10, font=LABEL_FONT)
-        self.form_available_copies.grid(row=7, column=1, sticky="w", padx=5, pady=2)
-
-
-
-        # Buttons
-        btn_frame = tk.Frame(form, bg=PRIMARY_BG)
-        btn_frame.grid(row=0, column=2, rowspan=8, padx=10)
+        # ------------------ BOOK ACTION BUTTONS ------------------
+        btn_frame = tk.Frame(self.content, bg=PRIMARY_BG)
+        btn_frame.pack(fill="x", pady=(10, 0), padx=10)
 
         add_btn = tk.Button(
             btn_frame, text="Add New Book",
             bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
             command=self.add_new_book
         )
-        add_btn.pack(fill="x", pady=5)
+        add_btn.pack(side="left", padx=5)
 
-        update_btn = tk.Button(
-            btn_frame, text="Update Selected",
+        edit_popup_btn = tk.Button(
+            btn_frame, text="Edit Selected Item",
             bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
-            command=self.update_selected_book
+            command=self.open_edit_book_popup
         )
-        update_btn.pack(fill="x", pady=5)
+        edit_popup_btn.pack(side="left", padx=5)
+
+        reviews_btn = tk.Button(
+            btn_frame, text="View Reviews",
+            bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
+            command=self.open_book_reviews_popup
+        )
+        reviews_btn.pack(side="left", padx=5)
 
         # ------------------ LOAD INITIAL BOOKS ------------------
         self.load_books()
@@ -663,7 +590,7 @@ class ManagerFrame(tk.Frame):
                     f"${b['price_rent']:.2f}",
                     b["total_copies"],
                     b["available_copies"],
-                    f"{b['avg_rating']:.1f}",
+                        ("N/A" if (b.get('review_count') is None or b.get('review_count') == 0) else f"{b['avg_rating']:.1f}"),
                     b["genre"] or "",
                     b["publication_year"] or "",
                     b["created_at"]
@@ -756,6 +683,202 @@ class ManagerFrame(tk.Frame):
 
         book_id = int(sel[0])
         self._open_book_details_modal(book_id)
+
+    def open_edit_book_popup(self):
+        """Open a popup to edit selected book"""
+        sel = self.books_tree.selection()
+        if not sel:
+            messagebox.showwarning("Select Book", "Please select a book to edit.")
+            return
+        
+        book_id = int(sel[0])
+        
+        # Find the book in our list
+        book = None
+        for b in self.book_rows:
+            if b["id"] == book_id:
+                book = b
+                break
+        
+        if not book:
+            messagebox.showerror("Error", "Book not found.")
+            return
+        
+        # Create edit popup
+        win = tk.Toplevel(self)
+        win.title(f"Edit Book - {book['title']}")
+        win.geometry("500x450")
+        win.configure(bg=PRIMARY_BG)
+        win.transient(self)
+        win.grab_set()
+        
+        # Header
+        tk.Label(
+            win, text=f"Edit Book - ID {book_id}",
+            bg=PRIMARY_BG, fg=ACCENT, font=TITLE_FONT
+        ).pack(pady=10)
+        
+        # Form
+        form = tk.Frame(win, bg=PRIMARY_BG)
+        form.pack(fill="x", padx=20)
+        
+        # Title
+        tk.Label(form, text="Title:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=0, column=0, sticky="e", pady=5)
+        title_var = tk.StringVar(value=book.get("title", ""))
+        tk.Entry(form, textvariable=title_var, width=40, font=LABEL_FONT).grid(row=0, column=1, padx=5)
+        
+        # Author
+        tk.Label(form, text="Author:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=1, column=0, sticky="e", pady=5)
+        author_var = tk.StringVar(value=book.get("author", ""))
+        tk.Entry(form, textvariable=author_var, width=40, font=LABEL_FONT).grid(row=1, column=1, padx=5)
+        
+        # Buy Price
+        tk.Label(form, text="Buy Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=2, column=0, sticky="e", pady=5)
+        buy_var = tk.StringVar(value=str(book.get("price_buy", "")))
+        tk.Entry(form, textvariable=buy_var, width=15, font=LABEL_FONT).grid(row=2, column=1, sticky="w", padx=5)
+        
+        # Rent Price
+        tk.Label(form, text="Rent Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=3, column=0, sticky="e", pady=5)
+        rent_var = tk.StringVar(value=str(book.get("price_rent", "")))
+        tk.Entry(form, textvariable=rent_var, width=15, font=LABEL_FONT).grid(row=3, column=1, sticky="w", padx=5)
+        
+        # Genre
+        tk.Label(form, text="Genre:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=4, column=0, sticky="e", pady=5)
+        genre_var = tk.StringVar(value=book.get("genre", ""))
+        tk.Entry(form, textvariable=genre_var, width=30, font=LABEL_FONT).grid(row=4, column=1, sticky="w", padx=5)
+        
+        # Year
+        tk.Label(form, text="Publication Year:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=5, column=0, sticky="e", pady=5)
+        year_var = tk.StringVar(value=str(book.get("publication_year", "")))
+        tk.Entry(form, textvariable=year_var, width=15, font=LABEL_FONT).grid(row=5, column=1, sticky="w", padx=5)
+        
+        # Total Copies
+        tk.Label(form, text="Total Copies:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=6, column=0, sticky="e", pady=5)
+        total_var = tk.StringVar(value=str(book.get("total_copies", "")))
+        tk.Entry(form, textvariable=total_var, width=15, font=LABEL_FONT).grid(row=6, column=1, sticky="w", padx=5)
+        
+        # Available Copies
+        tk.Label(form, text="Available Copies:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=7, column=0, sticky="e", pady=5)
+        available_var = tk.StringVar(value=str(book.get("available_copies", "")))
+        tk.Entry(form, textvariable=available_var, width=15, font=LABEL_FONT).grid(row=7, column=1, sticky="w", padx=5)
+        
+        # Buttons
+        btn_frame = tk.Frame(win, bg=PRIMARY_BG)
+        btn_frame.pack(fill="x", padx=20, pady=15)
+        
+        def save_changes():
+            try:
+                _, err = api_manager_update_book(
+                    book_id,
+                    title_var.get(),
+                    author_var.get(),
+                    float(buy_var.get()),
+                    float(rent_var.get()),
+                    genre_var.get(),
+                    year_var.get() or None,
+                    int(total_var.get()),
+                    int(available_var.get())
+                )
+                if err:
+                    messagebox.showerror("Error", err)
+                else:
+                    messagebox.showinfo("Success", "Book updated successfully.")
+                    win.destroy()
+                    self.load_books()
+            except ValueError as e:
+                messagebox.showerror("Error", f"Invalid input: {str(e)}")
+        
+        tk.Button(
+            btn_frame, text="Save Changes",
+            bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
+            command=save_changes
+        ).pack(side="left", padx=5)
+        
+        tk.Button(
+            btn_frame, text="Cancel",
+            bg=BUTTON_BG, fg=BUTTON_FG, font=LABEL_FONT,
+            command=win.destroy
+        ).pack(side="left", padx=5)
+
+
+    # ========================================================
+    # View Book Reviews Popup
+    # ========================================================
+
+    def open_book_reviews_popup(self):
+        """Open a popup showing only reviews for the selected book"""
+        sel = self.books_tree.selection()
+        if not sel:
+            messagebox.showwarning("Select Book", "Please select a book to view reviews.")
+            return
+        
+        book_id = int(sel[0])
+        
+        # Find the book in our list
+        book = None
+        for b in self.book_rows:
+            if b["id"] == book_id:
+                book = b
+                break
+        
+        if not book:
+            messagebox.showerror("Error", "Book not found.")
+            return
+        
+        # Fetch reviews
+        reviews, err = api_manager_get_reviews(book_id)
+        if err:
+            messagebox.showerror("Error", err)
+            return
+        
+        # Create reviews popup
+        win = tk.Toplevel(self)
+        win.title(f"Reviews - {book['title']}")
+        win.geometry("700x500")
+        win.configure(bg=PRIMARY_BG)
+        win.transient(self)
+        win.grab_set()
+        
+        # Header
+        tk.Label(
+            win, text=f"Reviews for '{book['title']}'",
+            bg=PRIMARY_BG, fg=ACCENT, font=TITLE_FONT
+        ).pack(pady=10)
+        
+        # Reviews text box
+        reviews_frame = tk.Frame(win, bg=PRIMARY_BG)
+        reviews_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        reviews_box = tk.Text(
+            reviews_frame, height=20, width=80,
+            fg=TEXT_COLOR, font=("Courier New", 10),
+            wrap="word"
+        )
+        reviews_box.pack(side="left", fill="both", expand=True)
+        
+        scroll = ttk.Scrollbar(reviews_frame, command=reviews_box.yview)
+        reviews_box.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        
+        # Display reviews
+        if not reviews:
+            reviews_box.insert("1.0", "No reviews yet.")
+        else:
+            for r in reviews:
+                reviews_box.insert("end", f"User: {r['username']}\n")
+                reviews_box.insert("end", f"Rating: {r['rating']}/5\n")
+                reviews_box.insert("end", f"Review: {r['review_text']}\n")
+                reviews_box.insert("end", f"Date: {r['created_at']}\n")
+                reviews_box.insert("end", "-" * 70 + "\n\n")
+        
+        reviews_box.config(state="disabled")
+        
+        # Close button
+        tk.Button(
+            win, text="Close",
+            bg=BUTTON_BG, fg=BUTTON_FG, font=LABEL_FONT,
+            command=win.destroy
+        ).pack(pady=10)
 
 
     # ========================================================
@@ -1003,7 +1126,15 @@ class ManagerFrame(tk.Frame):
         self.customers_tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
 
-        self.customers_tree.bind("<Double-1>", self.open_customer_profile)
+        # Button frame at bottom
+        btn_frame = tk.Frame(self.content, bg=PRIMARY_BG)
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        tk.Button(
+            btn_frame, text="View Selected Customer",
+            bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
+            command=self.open_customer_profile
+        ).pack(side="left", padx=5)
 
         # Initial load
         self.load_customers()
@@ -1056,12 +1187,13 @@ class ManagerFrame(tk.Frame):
 
 
     # ========================================================
-    # Double-Click -> Open Profile Modal
+    # View Selected Customer Profile
     # ========================================================
 
     def open_customer_profile(self, event=None):
         sel = self.customers_tree.selection()
         if not sel:
+            messagebox.showwarning("Select Customer", "Please select a customer to view.")
             return
 
         customer_id = int(sel[0])
@@ -1118,20 +1250,45 @@ class ManagerFrame(tk.Frame):
             columns=("id", "total", "status", "date"),
             show="headings", height=8
         )
-        orders_tree.heading("id", text="Order ID")
-        orders_tree.heading("total", text="Total")
-        orders_tree.heading("status", text="Status")
-        orders_tree.heading("date", text="Date")
+        # Make headings sortable using shared sort_treeview
+        orders_tree.heading("id", text="Order ID", command=lambda c="id": self.sort_treeview(orders_tree, c, 0))
+        orders_tree.heading("total", text="Total", command=lambda c="total": self.sort_treeview(orders_tree, c, 0))
+        orders_tree.heading("status", text="Status", command=lambda c="status": self.sort_treeview(orders_tree, c, 0))
+        orders_tree.heading("date", text="Date", command=lambda c="date": self.sort_treeview(orders_tree, c, 0))
 
-        orders_tree.column("id", width=80, anchor="center")
-        orders_tree.column("total", width=100, anchor="e")
-        orders_tree.column("status", width=110, anchor="center")
-        orders_tree.column("date", width=160)
+        orders_tree.column("id", width=120, anchor="center")
+        orders_tree.column("total", width=140, anchor="e")
+        orders_tree.column("status", width=150, anchor="center")
+        orders_tree.column("date", width=200)
 
         orders_tree.pack(side="left", fill="both", expand=True)
         scroll1 = ttk.Scrollbar(orders_box, orient="vertical", command=orders_tree.yview)
         orders_tree.configure(yscrollcommand=scroll1.set)
         scroll1.pack(side="right", fill="y")
+
+        # When selecting in one table, deselect rows in the other tables
+        def _deselect_other_trees(active_tree):
+            # Prevent recursive selection events when programmatically changing selection
+            if getattr(self, "_suppress_tree_select", False):
+                return
+            setattr(self, "_suppress_tree_select", True)
+            try:
+                for t in (orders_tree, rentals_tree):
+                    if t is not active_tree:
+                        sel = t.selection()
+                        if sel:
+                            try:
+                                t.selection_remove(*sel)
+                            except Exception:
+                                # fallback to setting empty selection
+                                try:
+                                    t.selection_set(())
+                                except Exception:
+                                    pass
+            finally:
+                setattr(self, "_suppress_tree_select", False)
+
+        orders_tree.bind("<<TreeviewSelect>>", lambda e: _deselect_other_trees(orders_tree))
 
         # Load orders
         orders, _ = api_manager_get_customer_orders(cid)
@@ -1194,22 +1351,24 @@ class ManagerFrame(tk.Frame):
             columns=("id", "book", "due", "rented", "returned"),
             show="headings", height=8
         )
-        rentals_tree.heading("id", text="Rental ID")
-        rentals_tree.heading("book", text="Book")
-        rentals_tree.heading("due", text="Due Date")
-        rentals_tree.heading("rented", text="Rented At")
-        rentals_tree.heading("returned", text="Returned At")
+        rentals_tree.heading("id", text="Rental ID", command=lambda c="id": self.sort_treeview(rentals_tree, c, 0))
+        rentals_tree.heading("book", text="Book", command=lambda c="book": self.sort_treeview(rentals_tree, c, 0))
+        rentals_tree.heading("due", text="Due Date", command=lambda c="due": self.sort_treeview(rentals_tree, c, 0))
+        rentals_tree.heading("rented", text="Rented At", command=lambda c="rented": self.sort_treeview(rentals_tree, c, 0))
+        rentals_tree.heading("returned", text="Returned At", command=lambda c="returned": self.sort_treeview(rentals_tree, c, 0))
 
-        rentals_tree.column("id", width=80, anchor="center")
-        rentals_tree.column("book", width=240)
-        rentals_tree.column("due", width=120, anchor="center")
-        rentals_tree.column("rented", width=140, anchor="center")
-        rentals_tree.column("returned", width=140, anchor="center")
+        rentals_tree.column("id", width=100, anchor="center")
+        rentals_tree.column("book", width=300)
+        rentals_tree.column("due", width=140, anchor="center")
+        rentals_tree.column("rented", width=160, anchor="center")
+        rentals_tree.column("returned", width=160, anchor="center")
 
         rentals_tree.pack(side="left", fill="both", expand=True)
         scroll2 = ttk.Scrollbar(rentals_box, orient="vertical", command=rentals_tree.yview)
         rentals_tree.configure(yscrollcommand=scroll2.set)
         scroll2.pack(side="right", fill="y")
+
+        rentals_tree.bind("<<TreeviewSelect>>", lambda e: _deselect_other_trees(rentals_tree))
 
         # Load rentals
         rentals, _ = api_manager_get_customer_rentals(cid)

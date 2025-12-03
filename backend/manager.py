@@ -162,7 +162,11 @@ def init_manager_routes(app):
                     COALESCE((
                         SELECT AVG(r.rating) FROM reviews r
                         WHERE r.book_id = b.id
-                    ), 0) AS avg_rating
+                    ), 0) AS avg_rating,
+                    COALESCE((
+                        SELECT COUNT(*) FROM reviews r
+                        WHERE r.book_id = b.id
+                    ), 0) AS review_count
                 FROM books b
                 LEFT JOIN inventory inv ON inv.book_id = b.id
                 {where_clause}
@@ -175,6 +179,7 @@ def init_manager_routes(app):
                 row["price_buy"] = float(row["price_buy"])
                 row["price_rent"] = float(row["price_rent"])
                 row["avg_rating"] = float(row["avg_rating"])
+                row["review_count"] = int(row.get("review_count", 0))
 
             return jsonify(rows), 200
 
@@ -331,15 +336,17 @@ def init_manager_routes(app):
                     genre=%s, publication_year=%s
                 WHERE id=%s
             """, (title, author, pb, pr, genre, year, book_id))
+            
+            # Check if book was found
+            if cursor.rowcount == 0:
+                return jsonify({"error": "Book not found"}), 404
+            
             cursor.execute("""
                 UPDATE inventory
                 SET total_copies = %s,
                     available_copies = %s
                 WHERE book_id = %s
             """, (total_copies, available_copies, book_id))
-
-            if cursor.rowcount == 0:
-                return jsonify({"error": "Book not found"}), 404
 
             conn.commit()
             return jsonify({"message": "Book updated"}), 200
