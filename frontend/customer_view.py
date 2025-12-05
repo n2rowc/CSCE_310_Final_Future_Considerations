@@ -4,6 +4,8 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import os
+from datetime import datetime
 from api_client import (
     api_search_books,
     api_place_order,
@@ -474,8 +476,37 @@ class CustomerFrame(tk.Frame):
         lines.append("-" * 50)
         lines.append(f"TOTAL: ${bill['total_price']:.2f}")
 
-        text.insert("1.0", "\n".join(lines))
+        receipt_text = "\n".join(lines)
+        text.insert("1.0", receipt_text)
         text.configure(state="disabled")
+
+        # Save receipt to file
+        self._save_receipt(bill['order_id'], receipt_text)
+
+    def _save_receipt(self, order_id, receipt_text):
+        """Save receipt as a text file in the receipts folder."""
+        try:
+            # Get the main project directory (one level up from frontend)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            
+            # Create receipts directory in the main directory if it doesn't exist
+            receipts_dir = os.path.join(project_root, "receipts")
+            if not os.path.exists(receipts_dir):
+                os.makedirs(receipts_dir)
+            
+            # Generate filename with order ID and timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"receipt_order_{order_id}_{timestamp}.txt"
+            filepath = os.path.join(receipts_dir, filename)
+            
+            # Write receipt to file
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(receipt_text)
+            
+        except Exception as e:
+            # Silently fail - don't interrupt the user experience
+            print(f"[RECEIPT SAVE ERROR] {e}")
 
     # ============================================================
     # HISTORY VIEW
