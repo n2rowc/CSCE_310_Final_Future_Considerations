@@ -2,6 +2,7 @@
 from flask import request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db_connection
+from auth_middleware import create_token, require_auth, get_token_from_request, revoke_token
 
 
 def init_authorize_routes(app):
@@ -99,10 +100,14 @@ def init_authorize_routes(app):
             if not check_password_hash(user["password_hash"], password):
                 return jsonify({"error": "Invalid username or password"}), 401
 
+            # Create authentication token
+            token = create_token(user["id"], user["username"], user["role"])
+
             return jsonify({
                 "user_id": user["id"],
                 "username": user["username"],
-                "role": user["role"]
+                "role": user["role"],
+                "token": token
             }), 200
 
         except Exception as e:
@@ -114,3 +119,13 @@ def init_authorize_routes(app):
                 cursor.close()
             if conn:
                 conn.close()
+
+    # ---------- Logout ----------
+    @app.route("/api/logout", methods=["POST"])
+    @require_auth
+    def logout():
+        """Logout and revoke token"""
+        token = get_token_from_request()
+        if token:
+            revoke_token(token)
+        return jsonify({"message": "Logged out successfully"}), 200

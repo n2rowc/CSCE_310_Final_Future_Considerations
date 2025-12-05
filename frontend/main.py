@@ -4,6 +4,7 @@ import tkinter as tk
 from login_view import LoginFrame, RegisterFrame
 from customer_view import CustomerFrame
 from manager_view import ManagerFrame
+from api_client import clear_auth_token
 
 PRIMARY_BG = "#f7f1e3"
 
@@ -44,6 +45,8 @@ class BookstoreApp(tk.Tk):
             self._switch_frame(CustomerFrame)
 
     def logout(self):
+        # Clear authentication token
+        clear_auth_token()
         self.user_info = None
         self.show_login()
 

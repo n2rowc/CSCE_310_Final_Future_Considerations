@@ -2,6 +2,7 @@
 from flask import request, jsonify
 from database import get_db_connection
 from datetime import datetime, timedelta
+from auth_middleware import require_customer, get_current_user_id
 
 
 def init_customer_routes(app):
@@ -11,6 +12,7 @@ def init_customer_routes(app):
     # ============================================================
 
     @app.route("/api/books", methods=["GET"])
+    @require_customer
     def search_books():
         """
         GET /api/books
@@ -88,6 +90,7 @@ def init_customer_routes(app):
     # ============================================================
 
     @app.route("/api/books/<int:book_id>", methods=["GET"])
+    @require_customer
     def get_book_details(book_id):
         """
         Returns:
@@ -117,9 +120,9 @@ def init_customer_routes(app):
             if not book:
                 return jsonify({"error": "Book not found"}), 404
 
-            # Average rating + count
+            # Average rating + count (rounded to 1 decimal place)
             cur.execute("""
-                SELECT ROUND(AVG(rating), 2) AS avg_rating,
+                SELECT ROUND(AVG(rating), 1) AS avg_rating,
                        COUNT(*) AS review_count
                 FROM reviews
                 WHERE book_id = %s
@@ -155,13 +158,15 @@ def init_customer_routes(app):
     # ============================================================
 
     @app.route("/api/orders", methods=["POST"])
+    @require_customer
     def place_order():
         data = request.get_json(silent=True) or {}
-        user_id = data.get("user_id")
+        # Get user_id from authenticated token, not from request
+        user_id = get_current_user_id()
         items = data.get("items", [])
 
-        if not user_id or not items:
-            return jsonify({"error": "Missing user_id or items"}), 400
+        if not items:
+            return jsonify({"error": "Missing items"}), 400
 
         conn = None
         cur = None
@@ -281,18 +286,58 @@ def init_customer_routes(app):
             if conn: conn.close()
 
     # ============================================================
-    # 4. POST REVIEW
+    # 4. GET ALL REVIEWS FOR A BOOK
+    # ============================================================
+
+    @app.route("/api/books/<int:book_id>/reviews", methods=["GET"])
+    @require_customer
+    def get_book_reviews(book_id):
+        """Return all reviews for a book with usernames."""
+        conn = None
+        cur = None
+
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+
+            cur.execute("""
+                SELECT r.id, r.rating, r.review_text, r.created_at,
+                       u.username
+                FROM reviews r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.book_id = %s
+                ORDER BY r.created_at DESC
+            """, (book_id,))
+
+            reviews = cur.fetchall()
+            for r in reviews:
+                r["rating"] = int(r["rating"])
+
+            return jsonify(reviews), 200
+
+        except Exception as e:
+            print("[GET BOOK REVIEWS ERROR]", e)
+            return jsonify({"error": "Error fetching reviews"}), 500
+
+        finally:
+            if cur: cur.close()
+            if conn: conn.close()
+
+    # ============================================================
+    # 5. POST REVIEW
     # ============================================================
 
     @app.route("/api/reviews", methods=["POST"])
+    @require_customer
     def add_review():
         data = request.get_json(silent=True) or {}
-        user_id = data.get("user_id")
+        # Get user_id from authenticated token, not from request
+        user_id = get_current_user_id()
         book_id = data.get("book_id")
         rating = data.get("rating")
         review_text = data.get("review_text", "")
 
-        if not (user_id and book_id and rating):
+        if not (book_id and rating):
             return jsonify({"error": "Missing fields"}), 400
 
         conn = None
@@ -327,7 +372,12 @@ def init_customer_routes(app):
     # ============================================================
 
     @app.route("/api/history/<int:user_id>", methods=["GET"])
+    @require_customer
     def history(user_id):
+        # Verify user can only access their own history
+        current_user_id = get_current_user_id()
+        if current_user_id != user_id:
+            return jsonify({"error": "Unauthorized: You can only access your own history"}), 403
         conn = None
         cur = None
 

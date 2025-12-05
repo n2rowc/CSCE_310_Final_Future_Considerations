@@ -5,6 +5,7 @@
 from flask import request, jsonify
 from database import get_db_connection
 from datetime import datetime
+from auth_middleware import require_manager
 
 
 def init_manager_routes(app):
@@ -27,6 +28,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/orders", methods=["GET"])
+    @require_manager
     def manager_list_orders():
         """Returns all orders w/ customer username + items."""
         conn = None
@@ -84,6 +86,7 @@ def init_manager_routes(app):
 
 
     @app.route("/api/manager/orders/<int:order_id>/status", methods=["PATCH"])
+    @require_manager
     def manager_update_order_status(order_id):
         """Mark order as Paid/Pending."""
         data = request.get_json(silent=True) or {}
@@ -123,6 +126,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/books", methods=["GET"])
+    @require_manager
     def manager_search_books():
         """Advanced search: q, genre, year."""
         q = request.args.get("q", "").strip()
@@ -195,6 +199,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/books/<int:book_id>/details", methods=["GET"])
+    @require_manager
     def manager_book_details(book_id):
 
         conn = None
@@ -224,6 +229,7 @@ def init_manager_routes(app):
 
 
     @app.route("/api/manager/books/<int:book_id>/reviews", methods=["GET"])
+    @require_manager
     def manager_book_reviews(book_id):
         """Return all reviews for this book."""
         conn = None
@@ -259,6 +265,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/books", methods=["POST"])
+    @require_manager
     def manager_add_book():
         data = request.get_json(silent=True) or {}
         title = (data.get("title") or "").strip()
@@ -309,6 +316,7 @@ def init_manager_routes(app):
 
 
     @app.route("/api/manager/books/<int:book_id>", methods=["PUT"])
+    @require_manager
     def manager_update_book(book_id):
         data = request.get_json(silent=True) or {}
 
@@ -380,6 +388,7 @@ def init_manager_routes(app):
 
 
     @app.route("/api/manager/books/<int:book_id>/inventory", methods=["PATCH"])
+    @require_manager
     def manager_adjust_inventory(book_id):
         """Increment available copies AND total copies if needed."""
         data = request.get_json(silent=True) or {}
@@ -422,6 +431,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/customers", methods=["GET"])
+    @require_manager
     def manager_search_customers():
         q = request.args.get("q", "").strip()
 
@@ -458,6 +468,7 @@ def init_manager_routes(app):
 
 
     @app.route("/api/manager/customers/<int:customer_id>", methods=["GET"])
+    @require_manager
     def manager_get_customer(customer_id):
         conn = None
         cursor = None
@@ -489,6 +500,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/customers/<int:customer_id>/orders", methods=["GET"])
+    @require_manager
     def manager_customer_orders(customer_id):
         """All orders for a customer."""
         conn = None
@@ -521,6 +533,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/customers/<int:customer_id>/rentals", methods=["GET"])
+    @require_manager
     def manager_customer_rentals(customer_id):
         conn = None
         cursor = None
@@ -551,6 +564,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/customers/<int:customer_id>/rentals", methods=["POST"])
+    @require_manager
     def manager_add_manual_rental(customer_id):
         data = request.get_json(silent=True) or {}
         book_id = data.get("book_id")
@@ -605,6 +619,7 @@ def init_manager_routes(app):
     # ============================================================
 
     @app.route("/api/manager/rentals/<int:rental_id>/return", methods=["PATCH"])
+    @require_manager
     def manager_mark_returned(rental_id):
         conn = None
         cursor = None

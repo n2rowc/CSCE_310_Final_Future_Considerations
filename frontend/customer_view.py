@@ -4,14 +4,13 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
-from datetime import datetime
 from api_client import (
     api_search_books,
     api_place_order,
     api_get_history,
     api_get_book_details,
-    api_submit_review
+    api_submit_review,
+    api_get_book_reviews
 )
 
 # ---------------- COLORS (UNCHANGED) ----------------
@@ -460,14 +459,7 @@ class CustomerFrame(tk.Frame):
         text = tk.Text(win, bg=PRIMARY_BG, fg=TEXT_COLOR, font=("Courier", 12))
         text.pack(fill="both", expand=True)
 
-        # Get customer name and current date
-        customer_name = self.user_info.get('username', 'Customer')
-        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
         lines = [
-            f"Customer Name: {customer_name}",
-            f"Date: {current_date}",
-            "",
             f"Order ID: {bill['order_id']}",
             f"Customer ID: {bill['user_id']}",
             f"Payment Status: {bill['payment_status']}",
@@ -482,36 +474,8 @@ class CustomerFrame(tk.Frame):
         lines.append("-" * 50)
         lines.append(f"TOTAL: ${bill['total_price']:.2f}")
 
-        receipt_content = "\n".join(lines)
-        text.insert("1.0", receipt_content)
+        text.insert("1.0", "\n".join(lines))
         text.configure(state="disabled")
-
-        # Write receipt to file
-        try:
-            # Get project root directory (parent of frontend folder)
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            # Create receipts folder at project root level
-            receipts_dir = os.path.join(project_root, "receipts")
-            if not os.path.exists(receipts_dir):
-                os.makedirs(receipts_dir)
-
-            # Sanitize customer name for filename
-            # Replace invalid filename characters with underscores
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in customer_name)
-            safe_name = safe_name.replace(' ', '_')
-
-            # Generate filename with customer name and timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{safe_name}_{timestamp}.txt"
-            filepath = os.path.join(receipts_dir, filename)
-
-            # Write receipt to file
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(receipt_content)
-
-        except Exception as e:
-            # Don't show error to user, just print for debugging
-            print(f"Error writing receipt to file: {e}")
 
     # ============================================================
     # HISTORY VIEW
@@ -703,32 +667,51 @@ class CustomerFrame(tk.Frame):
 
         win = tk.Toplevel(self)
         win.title(data["title"])
-        win.geometry("450x550")
+        win.geometry("500x700")
         win.configure(bg=PRIMARY_BG)
 
-        # Info block
-        info = [
-            f"Title: {data['title']}",
-            f"Author: {data['author']}",
-            f"Genre: {data.get('genre', '')}",
-            f"Year: {data.get('publication_year', '')}",
-            f"Buy: ${float(data['price_buy']):.2f}" if data.get("price_buy") else "Buy: N/A",
-            f"Rent: ${float(data['price_rent']):.2f}" if data.get("price_rent") else "Rent: N/A",
-            "",
-            (
-                f"Average Rating: {data['avg_rating']:.2f} ({data['review_count']} reviews)"
-                if data.get("avg_rating") is not None else f"Average Rating: N/A ({data.get('review_count', 0)} reviews)"
-            )
-        ]
+        # Store book_id for refresh functions
+        book_id = data["id"]
+        book_title = data["title"]
+        book_author = data["author"]
+        book_genre = data.get('genre', '')
+        book_year = data.get('publication_year', '')
+        book_price_buy = data.get("price_buy")
+        book_price_rent = data.get("price_rent")
 
-        tk.Label(
-            win,
-            text="\n".join(info),
+        # Info block frame (will be updated)
+        info_frame = tk.Frame(win, bg=PRIMARY_BG)
+        info_frame.pack(anchor="w", padx=10, pady=10, fill="x")
+        
+        info_label = tk.Label(
+            info_frame,
+            text="",
             bg=PRIMARY_BG,
             fg=TEXT_COLOR,
             justify="left",
             font=LABEL_FONT
-        ).pack(anchor="w", padx=10, pady=10)
+        )
+        info_label.pack(anchor="w")
+
+        def update_info_block(book_data):
+            """Update the info block with fresh data"""
+            info = [
+                f"Title: {book_data['title']}",
+                f"Author: {book_data['author']}",
+                f"Genre: {book_data.get('genre', '')}",
+                f"Year: {book_data.get('publication_year', '')}",
+                f"Buy: ${float(book_data['price_buy']):.2f}" if book_data.get("price_buy") else "Buy: N/A",
+                f"Rent: ${float(book_data['price_rent']):.2f}" if book_data.get("price_rent") else "Rent: N/A",
+                "",
+                (
+                    f"Average Rating: {book_data['avg_rating']:.1f} ({book_data['review_count']} reviews)"
+                    if book_data.get("avg_rating") is not None else f"Average Rating: N/A ({book_data.get('review_count', 0)} reviews)"
+                )
+            ]
+            info_label.config(text="\n".join(info))
+
+        # Initial info display
+        update_info_block(data)
 
         # Review section
         tk.Label(
@@ -745,9 +728,8 @@ class CustomerFrame(tk.Frame):
         tk.Label(rf, text="Rating (1–5):", font=LABEL_FONT,
                  bg=PRIMARY_BG).grid(row=0, column=0)
 
-        rating_var = tk.StringVar(
-            value=str(data["user_review"]["rating"]) if data.get("user_review") else "5"
-        )
+        # Rating defaults to 5, but don't autofill review text
+        rating_var = tk.StringVar(value="5")
 
         ttk.Combobox(
             rf,
@@ -761,22 +743,31 @@ class CustomerFrame(tk.Frame):
 
         review_box = tk.Text(rf, width=35, height=5)
         review_box.grid(row=2, column=0, columnspan=2)
-
-        if data.get("user_review"):
-            review_box.insert("1.0", data["user_review"]["review_text"])
+        # Keep review box blank - don't autofill previous review
 
         def submit_review():
             rating = int(rating_var.get())
             text = review_box.get("1.0", "end").strip()
 
             _, err2 = api_submit_review(
-                self.user_info["user_id"], data["id"], rating, text
+                self.user_info["user_id"], book_id, rating, text
             )
             if err2:
                 messagebox.showerror("Error", err2)
             else:
                 messagebox.showinfo("Success", "Review submitted!")
-                win.destroy()
+                # Clear the review text box
+                review_box.delete("1.0", "end")
+                # Refresh book details to get updated average rating
+                refresh_book_data()
+                # Refresh the reviews section
+                load_reviews()
+
+        def refresh_book_data():
+            """Refresh book data to get updated average rating"""
+            fresh_data, err = api_get_book_details(book_id, self.user_info["user_id"])
+            if not err and fresh_data:
+                update_info_block(fresh_data)
 
         tk.Button(
             win,
@@ -786,6 +777,133 @@ class CustomerFrame(tk.Frame):
             font=LABEL_FONT,
             command=submit_review
         ).pack(pady=10)
+
+        # Reviews History Section
+        reviews_section = tk.Frame(win, bg=PRIMARY_BG)
+        reviews_section.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        tk.Label(
+            reviews_section,
+            text="All Reviews:",
+            font=("Georgia", 14, "bold"),
+            bg=PRIMARY_BG,
+            fg=ACCENT
+        ).pack(anchor="w", pady=(5, 5))
+
+        # Scrollable frame for reviews
+        reviews_canvas = tk.Canvas(reviews_section, bg=PRIMARY_BG, highlightthickness=0, height=200)
+        reviews_scrollbar = ttk.Scrollbar(reviews_section, orient="vertical", command=reviews_canvas.yview)
+        reviews_scrollable = tk.Frame(reviews_canvas, bg=PRIMARY_BG)
+
+        reviews_scrollable.bind(
+            "<Configure>",
+            lambda e: reviews_canvas.configure(scrollregion=reviews_canvas.bbox("all"))
+        )
+
+        reviews_canvas.create_window((0, 0), window=reviews_scrollable, anchor="nw")
+        reviews_canvas.configure(yscrollcommand=reviews_scrollbar.set)
+
+        def load_reviews():
+            # Clear existing reviews
+            for widget in reviews_scrollable.winfo_children():
+                widget.destroy()
+
+            # Fetch all reviews
+            all_reviews, err = api_get_book_reviews(book_id)
+            if err:
+                tk.Label(
+                    reviews_scrollable,
+                    text=f"Error loading reviews: {err}",
+                    bg=PRIMARY_BG,
+                    fg=TEXT_COLOR,
+                    font=LABEL_FONT
+                ).pack(anchor="w", padx=5, pady=5)
+                return
+
+            if not all_reviews:
+                tk.Label(
+                    reviews_scrollable,
+                    text="No reviews yet. Be the first to review!",
+                    bg=PRIMARY_BG,
+                    fg=TEXT_COLOR,
+                    font=("Georgia", 11, "italic")
+                ).pack(anchor="w", padx=5, pady=5)
+            else:
+                for review in all_reviews:
+                    # Create a frame for each review (like a comment)
+                    review_frame = tk.Frame(reviews_scrollable, bg="#f0f0f0", relief="raised", bd=1)
+                    review_frame.pack(fill="x", padx=5, pady=5)
+
+                    # Username and rating header
+                    header_frame = tk.Frame(review_frame, bg="#f0f0f0")
+                    header_frame.pack(fill="x", padx=8, pady=(8, 4))
+
+                    username_label = tk.Label(
+                        header_frame,
+                        text=f"@{review['username']}",
+                        bg="#f0f0f0",
+                        fg=ACCENT,
+                        font=("Georgia", 11, "bold")
+                    )
+                    username_label.pack(side="left")
+
+                    # Rating stars
+                    rating_stars = "★" * review['rating'] + "☆" * (5 - review['rating'])
+                    rating_label = tk.Label(
+                        header_frame,
+                        text=rating_stars,
+                        bg="#f0f0f0",
+                        fg="#FFA500",
+                        font=("Georgia", 10)
+                    )
+                    rating_label.pack(side="left", padx=(10, 0))
+
+                    # Review text
+                    if review.get('review_text'):
+                        review_text_label = tk.Label(
+                            review_frame,
+                            text=review['review_text'],
+                            bg="#f0f0f0",
+                            fg=TEXT_COLOR,
+                            font=LABEL_FONT,
+                            justify="left",
+                            wraplength=450
+                        )
+                        review_text_label.pack(anchor="w", padx=8, pady=(0, 4))
+
+                    # Date
+                    date_str = review.get('created_at', '')
+                    if date_str:
+                        # Format date if needed
+                        try:
+                            from datetime import datetime as dt
+                            if isinstance(date_str, str):
+                                # Handle MySQL datetime format
+                                date_str_clean = date_str.split('.')[0] if '.' in date_str else date_str
+                                date_obj = dt.strptime(date_str_clean, '%Y-%m-%d %H:%M:%S')
+                                date_str = date_obj.strftime('%B %d, %Y')
+                        except Exception:
+                            # If parsing fails, use original string
+                            pass
+
+                    date_label = tk.Label(
+                        review_frame,
+                        text=date_str,
+                        bg="#f0f0f0",
+                        fg="#666666",
+                        font=("Georgia", 9, "italic")
+                    )
+                    date_label.pack(anchor="w", padx=8, pady=(0, 8))
+
+            # Update scroll region
+            reviews_canvas.update_idletasks()
+            reviews_canvas.configure(scrollregion=reviews_canvas.bbox("all"))
+
+        reviews_canvas.pack(side="left", fill="both", expand=True)
+        reviews_scrollbar.pack(side="right", fill="y")
+
+        # Load reviews initially
+        load_reviews()
 
     # ============================================================
     # ADD TO CART
