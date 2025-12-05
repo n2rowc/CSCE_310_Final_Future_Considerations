@@ -4,6 +4,8 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import os
+from datetime import datetime
 from api_client import (
     api_search_books,
     api_place_order,
@@ -458,7 +460,14 @@ class CustomerFrame(tk.Frame):
         text = tk.Text(win, bg=PRIMARY_BG, fg=TEXT_COLOR, font=("Courier", 12))
         text.pack(fill="both", expand=True)
 
+        # Get customer name and current date
+        customer_name = self.user_info.get('username', 'Customer')
+        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         lines = [
+            f"Customer Name: {customer_name}",
+            f"Date: {current_date}",
+            "",
             f"Order ID: {bill['order_id']}",
             f"Customer ID: {bill['user_id']}",
             f"Payment Status: {bill['payment_status']}",
@@ -473,8 +482,36 @@ class CustomerFrame(tk.Frame):
         lines.append("-" * 50)
         lines.append(f"TOTAL: ${bill['total_price']:.2f}")
 
-        text.insert("1.0", "\n".join(lines))
+        receipt_content = "\n".join(lines)
+        text.insert("1.0", receipt_content)
         text.configure(state="disabled")
+
+        # Write receipt to file
+        try:
+            # Get project root directory (parent of frontend folder)
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # Create receipts folder at project root level
+            receipts_dir = os.path.join(project_root, "receipts")
+            if not os.path.exists(receipts_dir):
+                os.makedirs(receipts_dir)
+
+            # Sanitize customer name for filename
+            # Replace invalid filename characters with underscores
+            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in customer_name)
+            safe_name = safe_name.replace(' ', '_')
+
+            # Generate filename with customer name and timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{safe_name}_{timestamp}.txt"
+            filepath = os.path.join(receipts_dir, filename)
+
+            # Write receipt to file
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(receipt_content)
+
+        except Exception as e:
+            # Don't show error to user, just print for debugging
+            print(f"Error writing receipt to file: {e}")
 
     # ============================================================
     # HISTORY VIEW

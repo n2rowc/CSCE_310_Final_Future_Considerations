@@ -1,0 +1,12 @@
+Customer Name: Nicholas Turoci
+Date: 2025-12-05 13:50:19
+
+Order ID: 19
+Customer ID: 5
+Payment Status: Pending
+
+Items:
+--------------------------------------------------
+Brave New World (rent) - $4.49
+--------------------------------------------------
+TOTAL: $4.49
