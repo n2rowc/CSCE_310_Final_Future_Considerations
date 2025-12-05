@@ -825,7 +825,12 @@ class ManagerFrame(tk.Frame):
             messagebox.showerror("Error", "Book not found.")
             return
         
-        # Fetch reviews
+        # Fetch book details (for average rating) and reviews
+        book_details, err_details = api_manager_get_book_details(book_id)
+        if err_details:
+            messagebox.showerror("Error", err_details)
+            return
+        
         reviews, err = api_manager_get_reviews(book_id)
         if err:
             messagebox.showerror("Error", err)
@@ -834,7 +839,7 @@ class ManagerFrame(tk.Frame):
         # Create reviews popup
         win = tk.Toplevel(self)
         win.title(f"Reviews - {book['title']}")
-        win.geometry("700x500")
+        win.geometry("500x700")
         win.configure(bg=PRIMARY_BG)
         win.transient(self)
         win.grab_set()
@@ -845,33 +850,130 @@ class ManagerFrame(tk.Frame):
             bg=PRIMARY_BG, fg=ACCENT, font=TITLE_FONT
         ).pack(pady=10)
         
-        # Reviews text box
-        reviews_frame = tk.Frame(win, bg=PRIMARY_BG)
-        reviews_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        # Average Rating Display
+        avg_rating_frame = tk.Frame(win, bg=PRIMARY_BG)
+        avg_rating_frame.pack(pady=(0, 10))
         
-        reviews_box = tk.Text(
-            reviews_frame, height=20, width=80,
-            fg=TEXT_COLOR, font=("Courier New", 10),
-            wrap="word"
-        )
-        reviews_box.pack(side="left", fill="both", expand=True)
-        
-        scroll = ttk.Scrollbar(reviews_frame, command=reviews_box.yview)
-        reviews_box.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        
-        # Display reviews
-        if not reviews:
-            reviews_box.insert("1.0", "No reviews yet.")
+        if book_details.get("avg_rating") is not None:
+            avg_rating_text = f"Average Rating: {book_details['avg_rating']:.1f} ({book_details.get('review_count', 0)} reviews)"
         else:
-            for r in reviews:
-                reviews_box.insert("end", f"User: {r['username']}\n")
-                reviews_box.insert("end", f"Rating: {r['rating']}/5\n")
-                reviews_box.insert("end", f"Review: {r['review_text']}\n")
-                reviews_box.insert("end", f"Date: {r['created_at']}\n")
-                reviews_box.insert("end", "-" * 70 + "\n\n")
+            avg_rating_text = f"Average Rating: N/A ({book_details.get('review_count', 0)} reviews)"
         
-        reviews_box.config(state="disabled")
+        tk.Label(
+            avg_rating_frame,
+            text=avg_rating_text,
+            bg=PRIMARY_BG,
+            fg=TEXT_COLOR,
+            font=("Georgia", 14, "bold")
+        ).pack()
+        
+        # Reviews Section
+        reviews_section = tk.Frame(win, bg=PRIMARY_BG)
+        reviews_section.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
+        tk.Label(
+            reviews_section,
+            text="All Reviews:",
+            font=("Georgia", 14, "bold"),
+            bg=PRIMARY_BG,
+            fg=ACCENT
+        ).pack(anchor="w", pady=(5, 5))
+        
+        # Scrollable frame for reviews
+        reviews_canvas = tk.Canvas(reviews_section, bg=PRIMARY_BG, highlightthickness=0, height=500)
+        reviews_scrollbar = ttk.Scrollbar(reviews_section, orient="vertical", command=reviews_canvas.yview)
+        reviews_scrollable = tk.Frame(reviews_canvas, bg=PRIMARY_BG)
+        
+        reviews_scrollable.bind(
+            "<Configure>",
+            lambda e: reviews_canvas.configure(scrollregion=reviews_canvas.bbox("all"))
+        )
+        
+        reviews_canvas.create_window((0, 0), window=reviews_scrollable, anchor="nw")
+        reviews_canvas.configure(yscrollcommand=reviews_scrollbar.set)
+        
+        # Display reviews in comment-style format
+        if not reviews:
+            tk.Label(
+                reviews_scrollable,
+                text="No reviews yet.",
+                bg=PRIMARY_BG,
+                fg=TEXT_COLOR,
+                font=("Georgia", 11, "italic")
+            ).pack(anchor="w", padx=5, pady=5)
+        else:
+            for review in reviews:
+                # Create a frame for each review (like a comment)
+                review_frame = tk.Frame(reviews_scrollable, bg="#f0f0f0", relief="raised", bd=1)
+                review_frame.pack(fill="x", padx=5, pady=5)
+                
+                # Username and rating header
+                header_frame = tk.Frame(review_frame, bg="#f0f0f0")
+                header_frame.pack(fill="x", padx=8, pady=(8, 4))
+                
+                username_label = tk.Label(
+                    header_frame,
+                    text=f"@{review['username']}",
+                    bg="#f0f0f0",
+                    fg=ACCENT,
+                    font=("Georgia", 11, "bold")
+                )
+                username_label.pack(side="left")
+                
+                # Rating stars
+                rating_stars = "★" * review['rating'] + "☆" * (5 - review['rating'])
+                rating_label = tk.Label(
+                    header_frame,
+                    text=rating_stars,
+                    bg="#f0f0f0",
+                    fg="#FFA500",
+                    font=("Georgia", 10)
+                )
+                rating_label.pack(side="left", padx=(10, 0))
+                
+                # Review text
+                if review.get('review_text'):
+                    review_text_label = tk.Label(
+                        review_frame,
+                        text=review['review_text'],
+                        bg="#f0f0f0",
+                        fg=TEXT_COLOR,
+                        font=LABEL_FONT,
+                        justify="left",
+                        wraplength=450
+                    )
+                    review_text_label.pack(anchor="w", padx=8, pady=(0, 4))
+                
+                # Date
+                date_str = review.get('created_at', '')
+                if date_str:
+                    # Format date if needed
+                    try:
+                        from datetime import datetime as dt
+                        if isinstance(date_str, str):
+                            # Handle MySQL datetime format
+                            date_str_clean = date_str.split('.')[0] if '.' in date_str else date_str
+                            date_obj = dt.strptime(date_str_clean, '%Y-%m-%d %H:%M:%S')
+                            date_str = date_obj.strftime('%B %d, %Y')
+                    except Exception:
+                        # If parsing fails, use original string
+                        pass
+                
+                date_label = tk.Label(
+                    review_frame,
+                    text=date_str,
+                    bg="#f0f0f0",
+                    fg="#666666",
+                    font=("Georgia", 9, "italic")
+                )
+                date_label.pack(anchor="w", padx=8, pady=(0, 8))
+        
+        reviews_canvas.pack(side="left", fill="both", expand=True)
+        reviews_scrollbar.pack(side="right", fill="y")
+        
+        # Update scroll region
+        reviews_canvas.update_idletasks()
+        reviews_canvas.configure(scrollregion=reviews_canvas.bbox("all"))
         
         # Close button
         tk.Button(

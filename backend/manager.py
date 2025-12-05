@@ -219,6 +219,18 @@ def init_manager_routes(app):
             if not book:
                 return jsonify({"error": "Book not found"}), 404
 
+            # Get average rating and review count
+            cursor.execute("""
+                SELECT ROUND(AVG(rating), 1) AS avg_rating,
+                       COUNT(*) AS review_count
+                FROM reviews
+                WHERE book_id = %s
+            """, (book_id,))
+            stats = cursor.fetchone()
+
+            book["avg_rating"] = float(stats["avg_rating"]) if stats["avg_rating"] else None
+            book["review_count"] = stats["review_count"]
+
             return jsonify(book), 200
 
         except Exception as e:
