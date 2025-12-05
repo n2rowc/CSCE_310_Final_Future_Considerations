@@ -603,28 +603,102 @@ class ManagerFrame(tk.Frame):
     # ========================================================
 
     def add_new_book(self):
-        try:
-            price_buy = float(self.form_buy.get())
-            price_rent = float(self.form_rent.get())
-        except:
-            messagebox.showwarning("Invalid", "Enter numeric prices.")
-            return
-
-        book, error = api_manager_add_book(
-            self.form_title.get().strip(),
-            self.form_author.get().strip(),
-            price_buy,
-            price_rent,
-            self.form_genre.get().strip(),
-            self.form_year.get().strip()
-        )
-
-        if error:
-            messagebox.showerror("Error Adding Book", error)
-            return
-
-        messagebox.showinfo("Success", "Book added.")
-        self.load_books()
+        """Open a popup to add a new book"""
+        # Create add book popup
+        win = tk.Toplevel(self)
+        win.title("Add New Book")
+        win.geometry("500x400")
+        win.configure(bg=PRIMARY_BG)
+        win.transient(self)
+        win.grab_set()
+        
+        # Header
+        tk.Label(
+            win, text="Add New Book",
+            bg=PRIMARY_BG, fg=ACCENT, font=TITLE_FONT
+        ).pack(pady=10)
+        
+        # Form
+        form = tk.Frame(win, bg=PRIMARY_BG)
+        form.pack(fill="x", padx=20)
+        
+        # Title
+        tk.Label(form, text="Title:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=0, column=0, sticky="e", pady=5)
+        title_var = tk.StringVar()
+        tk.Entry(form, textvariable=title_var, width=40, font=LABEL_FONT).grid(row=0, column=1, padx=5)
+        
+        # Author
+        tk.Label(form, text="Author:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=1, column=0, sticky="e", pady=5)
+        author_var = tk.StringVar()
+        tk.Entry(form, textvariable=author_var, width=40, font=LABEL_FONT).grid(row=1, column=1, padx=5)
+        
+        # Buy Price
+        tk.Label(form, text="Buy Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=2, column=0, sticky="e", pady=5)
+        buy_var = tk.StringVar()
+        tk.Entry(form, textvariable=buy_var, width=15, font=LABEL_FONT).grid(row=2, column=1, sticky="w", padx=5)
+        
+        # Rent Price
+        tk.Label(form, text="Rent Price:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=3, column=0, sticky="e", pady=5)
+        rent_var = tk.StringVar()
+        tk.Entry(form, textvariable=rent_var, width=15, font=LABEL_FONT).grid(row=3, column=1, sticky="w", padx=5)
+        
+        # Genre
+        tk.Label(form, text="Genre:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=4, column=0, sticky="e", pady=5)
+        genre_var = tk.StringVar()
+        tk.Entry(form, textvariable=genre_var, width=30, font=LABEL_FONT).grid(row=4, column=1, sticky="w", padx=5)
+        
+        # Year
+        tk.Label(form, text="Publication Year:", bg=PRIMARY_BG, font=LABEL_FONT).grid(row=5, column=0, sticky="e", pady=5)
+        year_var = tk.StringVar()
+        tk.Entry(form, textvariable=year_var, width=15, font=LABEL_FONT).grid(row=5, column=1, sticky="w", padx=5)
+        
+        # Buttons
+        btn_frame = tk.Frame(win, bg=PRIMARY_BG)
+        btn_frame.pack(fill="x", padx=20, pady=15)
+        
+        def save_book():
+            # Validate required fields
+            if not title_var.get().strip():
+                messagebox.showwarning("Missing Field", "Title is required.")
+                return
+            if not author_var.get().strip():
+                messagebox.showwarning("Missing Field", "Author is required.")
+                return
+            
+            try:
+                price_buy = float(buy_var.get()) if buy_var.get() else 0.0
+                price_rent = float(rent_var.get()) if rent_var.get() else 0.0
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Prices must be numeric.")
+                return
+            
+            book, error = api_manager_add_book(
+                title_var.get().strip(),
+                author_var.get().strip(),
+                price_buy,
+                price_rent,
+                genre_var.get().strip(),
+                year_var.get().strip() or None
+            )
+            
+            if error:
+                messagebox.showerror("Error", error)
+            else:
+                messagebox.showinfo("Success", "Book added successfully.")
+                win.destroy()
+                self.load_books()
+        
+        tk.Button(
+            btn_frame, text="Add Book",
+            bg=ACCENT, fg=BUTTON_FG, font=LABEL_FONT,
+            command=save_book
+        ).pack(side="left", padx=5)
+        
+        tk.Button(
+            btn_frame, text="Cancel",
+            bg=BUTTON_BG, fg=BUTTON_FG, font=LABEL_FONT,
+            command=win.destroy
+        ).pack(side="left", padx=5)
 
     # ========================================================
     # Update Selected Book
